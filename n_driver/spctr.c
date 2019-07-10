@@ -16,14 +16,18 @@ MODUEL_AUTHOR("MW");
 
 #define uchar unsigned char 
 #define uint unsigned int 
-#define INT_32 long 
-#define INT_64 long long  
+#define UINT_32 unsigned long 
+#define UINT_64 unsigned long long
+#define INT_32 long
+#define INT_64 long long   
 
 struct cdev scdev;
 dev_t devid;
 int major;
 struct class* sc_class;
 struct class_device* sc_class_dev;
+DEFINE_SPINLOCK(pos_lock);
+
 /*·½Ïò */
 #define H_D(x) gpio_set_value(PAD_GPIO_B+30,x)
 #define V_D(x) gpio_set_value(PAD_GPIO_B+31,x) 
@@ -42,12 +46,32 @@ struct class_device* sc_class_dev;
 struct sc_point{
     INT_64 x;
     INT_64 y;    
-}
+};
+struct sc_point cur_pos;
 struct sc_arg{
     struct sc_point current_pos;
     struct sc_point aim_pos;
     uint speed;
+    uint sc_res;
+};
+static int sc_step(struct sc_point aim_p)
+{
+    while()
 }
+
+static int sc_runing(unsigned long arg)
+{
+    struct sc_arg data_arg;
+    if(copy_from_user(&data_arg,(struct sc_arg *) arg, sizeof(struct sc_arg)))
+    {
+        return -EFAULT;
+    }
+    if(data_arg.current_pos.x != data_arg.aim_pos.x || data_arg.current_pos.y != data_arg.aim_pos.y)
+    {
+        sc_step(data_arg.aim_pos);
+    }
+}
+
 
 static int sc_gpio_init()
 {
@@ -66,8 +90,16 @@ static int sc_gpio_init()
 
 static ssize_t sc_read(struct file *filp, char *buffer, size_t count, loff_t *ppos)
 {
-
+    spin_lock(&pos_lock);
+    if(copy_to_user(buffer,(struct sc_point *)&cur_pos,sizeof(struct sc_point)))
+    {
+        spin_unlock(&pos_lock);
+        return -EFAULT;
+    }
+    spin_unlock(&pos_lock);
+    return 1;
 }
+
 static size_t sc_open(struct inode *node, struct file *file)
 {
     sc_gpio_init();
@@ -85,10 +117,13 @@ static size_t sc_ioctl(struct file *filp, unsigned char cmd, unsigned long arg)
         if(sc_reset() < 0)
         {
             printk("<0> fail resrt!!!");
+            return -1;
         }
+        else return 1;
         break;
     case SC_RUNNING:
-
+        return i2c_running( arg );
+        break;
     default:
         break;
     }
@@ -110,7 +145,7 @@ static int sc_init(void)
     sc_class = class_creat(THIS_MOUDLE,DEV_NAME);
     sc_class_dev = class_creat_dev(sc_class,NULL,devid,0,DEV_NAME);
 
-    return 0;
+    return 1;
 }
 
 
